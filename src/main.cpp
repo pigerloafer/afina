@@ -46,7 +46,7 @@ public:
         logService.reset(new Logging::ServiceImpl(logConfig));
 
         // Step 1: configure storage
-        std::string storage_type = "st_lru";
+        std::string storage_type = "mt_lru";
         if (options.count("storage") > 0) {
             storage_type = options["storage"].as<std::string>();
         }

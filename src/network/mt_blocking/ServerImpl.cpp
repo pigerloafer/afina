@@ -84,13 +84,11 @@ void ServerImpl::Stop() {
 }
 
 // See Server.h
-void ServerImpl::Join() {
+void ServerImpl::Join() { // How here can be multiple threads? 
     assert(_thread.joinable());
-    if (num_of_workers > 0) {
-        std::unique_lock<std::mutex> lock(_stop_mutex);
-        _stop_cv.wait(lock, [this] { return running.load(); });
-    }
     _thread.join();
+    std::unique_lock<std::mutex> lock(_stop_mutex);
+    _stop_cv.wait(lock, [this] { return running.load() || num_of_workers.load() > 0; });
     close(_server_socket);
 }
 
@@ -136,7 +134,7 @@ void ServerImpl::OnRun() {
             tv.tv_usec = 0;
             setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
         }
-
+        std::lock_guard<std::mutex> guard(_stop_mutex); // is it necessary if we have only one server thread?
         // TODO: Start new thread and process data from/to connection
         if (num_of_workers.load() <= MAX_NUM_OF_WORKERS) {
             num_of_workers++;
@@ -215,6 +213,9 @@ void ServerImpl::OnRun() {
                                 parser.Reset();
                             }
                         } // while (readed_bytes)
+                        if (!running.load()) {
+                            shutdown(client_socket, SHUT_RD);
+                        }
                     }
                     std::cout << readed_bytes << std::endl;
                     if (readed_bytes == 0) {
@@ -234,10 +235,12 @@ void ServerImpl::OnRun() {
                 command_to_execute.reset();
                 argument_for_command.resize(0);
                 parser.Reset();
-                
-                num_of_workers--;
-                if (!running && num_of_workers == 0) {
-                    _stop_cv.notify_all();
+                {
+                    std::unique_lock<std::mutex> lock(_stop_mutex);
+                    num_of_workers--;
+                    if (!running.load() && num_of_workers == 0) {
+                        _stop_cv.notify_all();
+                    }
                 }
             });
             client.detach();
