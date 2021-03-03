@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <thread>
+#include <condition_variable>
 
 #include <afina/network/Server.h>
 
@@ -13,6 +14,8 @@ class logger;
 namespace Afina {
 namespace Network {
 namespace MTblocking {
+
+const static size_t MAX_NUM_OF_WORKERS = 10;
 
 /**
  * # Network resource manager implementation
@@ -52,6 +55,13 @@ private:
 
     // Thread to run network on
     std::thread _thread;
+
+    // Current num of threads that are working
+    std::atomic<size_t> num_of_workers;
+
+    std::mutex _stop_mutex;
+
+    std::condition_variable _stop_cv;
 };
 
 } // namespace MTblocking
